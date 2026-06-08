@@ -1,3 +1,3 @@
 ﻿id,name,title,company,booth_id,status
-guest-0001,李明,首席技术官,未来科技有限公司,A-001,pending
-guest-0002,张华,产品总监,云端网络科技,A-002,pending
+guest-0001,李明,首席技术官,未来科技有限公司,A-001,rejected
+guest-0002,张华,产品总监,云端网络科技,A-002,invalid_status

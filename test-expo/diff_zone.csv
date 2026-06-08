@@ -1,0 +1,9 @@
+﻿zone,category,type,item,field,old_value,new_value,status,owner,note,confirm_time
+A,资源文件,修改,asset-0001,状态,uploaded,rejected,已确认,张三,检查文件类型，必要时转换格式,
+A,资源文件,修改,asset-0002,状态,uploaded,pending,已确认,张三,检查文件类型，必要时转换格式,
+A,嘉宾信息,修改,李明,状态,,pending,待确认,,,
+A,嘉宾信息,修改,张华,状态,,pending,待确认,,,
+D,展商资料,新增,D-001,展位,,次元科技,待确认,,,
+D,展商资料,新增,D-001,联系人,,陈经理,待确认,,,
+D,展商资料,新增,D-001,电话,,13600136001,待确认,,,
+D,展商资料,新增,D-001,邮箱,,chen@dimen.com,待确认,,,

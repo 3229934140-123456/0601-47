@@ -1,0 +1,8 @@
+id,status
+asset-0001,approved
+asset-0002,pending
+asset-0001,rejected
+asset-9999,approved
+,approved
+asset-0003,
+asset-0004,invalid_status_xyz

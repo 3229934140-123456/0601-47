@@ -6,7 +6,7 @@ assets:
   name: 主视觉海报
   path: assets\posters\主视觉海报
   size: 18
-  status: approved
+  status: rejected
   type: poster
 - booth_id: A-001
   filename: 展位3D模型
@@ -15,7 +15,7 @@ assets:
   name: 展位3D模型
   path: assets\models\展位3D模型
   size: 17
-  status: approved
+  status: pending
   type: model
 avatars:
 - avatar: ''
@@ -24,7 +24,7 @@ avatars:
   id: guest-0001
   name: 李明
   nameplate: 李明
-  status: pending
+  status: rejected
   title: 首席技术官
 - avatar: ''
   booth_id: A-002
@@ -32,7 +32,7 @@ avatars:
   id: guest-0002
   name: 张华
   nameplate: 张华
-  status: pending
+  status: invalid_status
   title: 产品总监
 booths:
 - company: 未来科技有限公司
@@ -95,6 +95,16 @@ booths:
   phone: '13700137001'
   poster: ''
   zone: C
+- company: 次元科技
+  contact: 陈经理
+  description: 元宇宙内容创作
+  email: chen@dimen.com
+  id: D-001
+  logo: ''
+  model: ''
+  phone: '13600136001'
+  poster: ''
+  zone: D
 publish_history:
 - note: 首次发布
   path: releases\v1.0.0_20260608_091915.zip
@@ -106,6 +116,11 @@ publish_history:
   status: archived
   timestamp: '20260608_091931'
   version: v1.1.0
+- note: 新增D展区
+  path: releases\v1.0.2_20260608_102809.zip
+  status: active
+  timestamp: '20260608_102809'
+  version: v1.0.2
 scene:
   name: test-expo
   navigation_points:
@@ -163,7 +178,7 @@ scene:
       z: 0.0
     type: booth
     zone: C
-  status: draft
+  status: published
   theme: tech
   welcome_message: 欢迎参加2024科技博览会！请探索各展位体验精彩内容。
   zone_info:

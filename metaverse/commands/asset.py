@@ -13,6 +13,7 @@ from metaverse.utils import (
     compute_file_hash,
     is_project_dir,
     parse_ids,
+    console,
 )
 
 
@@ -309,14 +310,14 @@ def export_status(ctx, output, zone, asset_type, fmt):
               type=click.Choice(["auto", "csv", "json"]), help="文件格式")
 @click.option("--status-field", default="status", help="状态字段名")
 @click.option("--id-field", default="id", help="ID字段名")
+@click.option("--strict", is_flag=True, help="严格模式：遇到无效状态或未知ID时终止")
 @click.pass_context
-def import_status(ctx, file_path, fmt, status_field, id_field):
+def import_status(ctx, file_path, fmt, status_field, id_field, strict):
     """从 CSV/JSON 批量导入资源状态变更
 
     FILE_PATH 状态文件路径
     """
     import csv as csv_module
-    import json as json_module
     project_path = ctx.obj["project_path"]
     if not is_project_dir(project_path):
         print_error("当前目录不是有效的场景项目")
@@ -332,43 +333,143 @@ def import_status(ctx, file_path, fmt, status_field, id_field):
             print_error(f"无法自动识别格式: {path.suffix}")
             raise click.Abort()
 
-    status_updates = {}
+    # 解析状态更新
+    raw_updates = []  # [(line_no, id, status, original_row)]
+    duplicate_ids = {}  # id -> [line_numbers]
+    invalid_status_rows = []  # [(line_no, id, status)]
+    empty_id_rows = []  # [line_no]
+    empty_status_rows = []  # [line_no]
+
+    known_statuses = {"pending", "uploaded", "approved", "rejected",
+                      "confirmed", "draft", "published", "archived"}
+
+    line_no = 0
     if fmt == "csv":
         with open(path, "r", encoding="utf-8-sig") as f:
             reader = csv_module.DictReader(f)
             for row in reader:
+                line_no += 1
                 rid = row.get(id_field, "").strip()
                 status = row.get(status_field, "").strip()
-                if rid and status:
-                    status_updates[rid] = status
+
+                if not rid:
+                    empty_id_rows.append(line_no)
+                    continue
+                if not status:
+                    empty_status_rows.append(line_no)
+                    continue
+
+                # 检查重复
+                if rid in duplicate_ids:
+                    duplicate_ids[rid].append(line_no)
+                else:
+                    duplicate_ids[rid] = [line_no]
+
+                # 检查状态有效性（软校验）
+                if status not in known_statuses:
+                    invalid_status_rows.append((line_no, rid, status))
+
+                raw_updates.append((line_no, rid, status, row))
     elif fmt == "json":
         with open(path, "r", encoding="utf-8") as f:
-            data = json_module.load(f)
+            data = json.load(f)
             items = data if isinstance(data, list) else data.get("assets", [])
-            for item in items:
+            for idx, item in enumerate(items):
+                line_no = idx + 1
                 rid = item.get(id_field, "").strip()
                 status = item.get(status_field, "").strip()
-                if rid and status:
-                    status_updates[rid] = status
 
+                if not rid:
+                    empty_id_rows.append(line_no)
+                    continue
+                if not status:
+                    empty_status_rows.append(line_no)
+                    continue
+
+                if rid in duplicate_ids:
+                    duplicate_ids[rid].append(line_no)
+                else:
+                    duplicate_ids[rid] = [line_no]
+
+                if status not in known_statuses:
+                    invalid_status_rows.append((line_no, rid, status))
+
+                raw_updates.append((line_no, rid, status, item))
+
+    # 去重，保留最后一条
+    status_updates = {}
+    duplicates = []
+    for rid, lines in duplicate_ids.items():
+        if len(lines) > 1:
+            duplicates.append((rid, lines))
+        # 取最后出现的值
+        for line_no, r_id, status, row in reversed(raw_updates):
+            if r_id == rid:
+                status_updates[rid] = status
+                break
+
+    # 严格模式下如果有错误直接终止
+    has_errors = bool(empty_id_rows or empty_status_rows or (strict and (invalid_status_rows or duplicates)))
+    if strict and has_errors:
+        print_error("严格模式下发现导入错误，已终止：")
+        if empty_id_rows:
+            print_error(f"  - 空ID行 ({len(empty_id_rows)} 行): 第 {', '.join(str(x) for x in empty_id_rows[:5])} 行")
+        if empty_status_rows:
+            print_error(f"  - 空状态行 ({len(empty_status_rows)} 行): 第 {', '.join(str(x) for x in empty_status_rows[:5])} 行")
+        if invalid_status_rows:
+            print_error(f"  - 无效状态 ({len(invalid_status_rows)} 项): 前3项: "
+                        f"{', '.join(f'{r[1]}={r[2]}' for r in invalid_status_rows[:3])}")
+        if duplicates:
+            print_error(f"  - 重复ID ({len(duplicates)} 个): {', '.join(d[0] for d in duplicates[:5])}")
+        raise click.Abort()
+
+    # 执行更新
     config = SceneConfig(project_path)
     assets = config.get("assets", [])
 
     updated = 0
-    not_found = []
-    for asset in assets:
-        aid = asset.get("id", "")
-        if aid in status_updates:
-            asset["status"] = status_updates[aid]
-            updated += 1
-
-    not_found = [rid for rid in status_updates if not any(a.get("id") == rid for a in assets)]
+    not_found_ids = []
+    for rid in status_updates:
+        found = False
+        for asset in assets:
+            if asset.get("id") == rid:
+                asset["status"] = status_updates[rid]
+                updated += 1
+                found = True
+                break
+        if not found:
+            not_found_ids.append(rid)
 
     config.set("assets", assets)
     config.save()
 
-    print_success(f"已更新 {updated} 个资源的状态")
-    if not_found:
-        print_warning(f"未找到的资源ID ({len(not_found)} 个): {', '.join(not_found[:5])}")
-        if len(not_found) > 5:
-            print_warning(f"  ... 另有 {len(not_found)-5} 个未显示")
+    # 输出结果摘要
+    console.rule("[bold cyan]导入结果摘要[/bold cyan]")
+    print_success(f"✓ 成功更新: {updated} 个资源")
+
+    warnings = []
+    if not_found_ids:
+        warnings.append(("未找到的ID", len(not_found_ids), not_found_ids))
+    if invalid_status_rows:
+        warnings.append(("状态值不常见", len(invalid_status_rows),
+                         [f"{r[1]}={r[2]}" for r in invalid_status_rows]))
+    if duplicates:
+        warnings.append(("重复ID（取最后一条）", len(duplicates),
+                         [f"{d[0]} (行{', '.join(str(x) for x in d[1])})" for d in duplicates]))
+    if empty_id_rows:
+        warnings.append(("空ID行（已跳过）", len(empty_id_rows),
+                         [f"第{x}行" for x in empty_id_rows[:5]]))
+    if empty_status_rows:
+        warnings.append(("空状态行（已跳过）", len(empty_status_rows),
+                         [f"第{x}行" for x in empty_status_rows[:5]]))
+
+    if warnings:
+        console.print()
+        print_warning("⚠ 有以下注意事项：")
+        for label, count, samples in warnings:
+            sample_str = ", ".join(str(s) for s in samples[:5])
+            more = f"... 另有{count-5}项" if count > 5 else ""
+            print_warning(f"  • {label}: {count} 项 - {sample_str} {more}")
+
+    print_info(f"\n导入源: {path.name}")
+    print_info(f"总计: {len(status_updates)} 条记录，成功 {updated}，跳过 {len(not_found_ids)}")

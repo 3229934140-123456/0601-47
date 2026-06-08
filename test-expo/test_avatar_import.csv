@@ -1,0 +1,7 @@
+id,status
+guest-0001,confirmed
+guest-0002,invalid_status
+guest-9999,pending
+guest-0001,rejected
+,draft
+guest-0003,

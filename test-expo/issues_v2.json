@@ -1,0 +1,44 @@
+{
+  "total": 3,
+  "errors": 0,
+  "warnings": 3,
+  "generated_at": "2026-06-08 11:00:00",
+  "issues": [
+    {
+      "id": "6ab0ffbf604a",
+      "category": "资源",
+      "level": "warning",
+      "item": "asset-0001",
+      "message": "文件扩展名  与类型 poster 可能不匹配",
+      "zone": "A",
+      "owner": "张三",
+      "suggestion": "检查文件类型，必要时转换格式",
+      "waived": false,
+      "confirmed": false
+    },
+    {
+      "id": "89308fd18771",
+      "category": "资源",
+      "level": "warning",
+      "item": "asset-0002",
+      "message": "文件扩展名  与类型 model 可能不匹配",
+      "zone": "A",
+      "owner": "张三",
+      "suggestion": "检查文件类型，必要时转换格式",
+      "waived": true,
+      "confirmed": false
+    },
+    {
+      "id": "abc123def456",
+      "category": "展位",
+      "level": "warning",
+      "item": "D-001",
+      "message": "展位缺少模型文件",
+      "zone": "D",
+      "owner": "李四",
+      "suggestion": "上传3D模型",
+      "waived": false,
+      "confirmed": false
+    }
+  ]
+}

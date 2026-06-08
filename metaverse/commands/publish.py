@@ -434,13 +434,20 @@ def diff_versions(ctx, v1, v2, detail, by_zone, issue_file, zone, output, fmt):
         print_info(f"已加载问题单，其中 {len(confirmed_ids)} 项已确认/豁免")
 
     if by_zone:
-        zone_summary = _summarize_diff_by_zone(diff, data_old, data_new, confirmed_ids)
+        prev_issues_dict = {}
+        if issue_file:
+            prev_issues_dict = _load_prev_issues(issue_file)
+        zone_summary = _summarize_diff_by_zone(diff, data_old, data_new, prev_issues_dict)
         _print_zone_diff_summary(zone_summary, zone_filter=zone)
         if output and fmt == "csv":
             _export_zone_diff_csv(zone_summary, output, zone_filter=zone)
         elif output and fmt == "json":
             with open(Path(output), "w", encoding="utf-8") as f:
-                json.dump({"by_zone": zone_summary}, f, ensure_ascii=False, indent=2)
+                json.dump({"by_zone": list(zone_summary.values())}, f, ensure_ascii=False, indent=2)
+            print_success(f"差异报告已导出: {output}")
+        elif output and fmt == "html":
+            with open(Path(output), "w", encoding="utf-8") as f:
+                f.write(_generate_zone_diff_html(zone_summary, diff["versions"]))
             print_success(f"差异报告已导出: {output}")
         return
 
@@ -843,14 +850,17 @@ def _print_issue_classification(classified: dict):
         print_table("", ["展区", "分类", "对象", "说明", "负责人", "建议动作"], rows)
 
 
-def _summarize_diff_by_zone(diff: dict, old_data: dict, new_data: dict, confirmed_ids: set = None) -> dict:
-    """按展区汇总变更，生成运营确认视角的清单"""
-    if confirmed_ids is None:
-        confirmed_ids = set()
+def _summarize_diff_by_zone(diff: dict, old_data: dict, new_data: dict, prev_issues: dict = None) -> dict:
+    """按展区汇总变更，生成运营确认视角的清单
+
+    prev_issues: 上一份问题单 {issue_id: issue}，用于标记已确认/已豁免
+    """
+    if prev_issues is None:
+        prev_issues = {}
 
     zone_summary = {}
 
-    # 初始化所有展区
+    # 初始化所有展区：从新旧数据 + diff 变更里综合收集
     old_booths = old_data.get("booths", [])
     new_booths = new_data.get("booths", [])
     all_zones = set()
@@ -858,18 +868,26 @@ def _summarize_diff_by_zone(diff: dict, old_data: dict, new_data: dict, confirme
         if b.get("zone"):
             all_zones.add(b["zone"])
 
-    for z in all_zones:
+    # 也要检查 schedules 里的 zone
+    for s in old_data.get("schedules", []) + new_data.get("schedules", []):
+        if s.get("zone"):
+            all_zones.add(s["zone"])
+
+    for z in sorted(all_zones):
         zone_summary[z] = {
             "zone": z,
+            "owner": "",
             "total_changes": 0,
-            "confirmed": 0,
+            "pending_changes": 0,
+            "confirmed_changes": 0,
+            "waived_changes": 0,
             "booth_changes": [],
             "asset_changes": [],
             "avatar_changes": [],
             "schedule_changes": [],
         }
 
-    # 辅助：根据 booth_id 找展区
+    # 辅助：根据 booth_id 找展区（新旧都查）
     booth_zone = {}
     for b in new_booths + old_booths:
         if b.get("id") and b.get("zone"):
@@ -878,219 +896,425 @@ def _summarize_diff_by_zone(diff: dict, old_data: dict, new_data: dict, confirme
     def _get_zone_by_booth(bid):
         return booth_zone.get(bid, "")
 
-    # 展位变更
-    booth_detail = diff.get("details", {}).get("booths", {})
-    for bid in booth_detail.get("added", []):
-        booth = next((b for b in new_booths if b.get("id") == bid), None)
-        zone = booth.get("zone", "") if booth else ""
-        if zone and zone in zone_summary:
-            entry = {
-                "type": "新增",
-                "item": bid,
-                "field": "展位",
-                "old_value": "",
-                "new_value": booth.get("company", "") if booth else bid,
-            }
-            zone_summary[zone]["booth_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+    # 辅助：从问题单匹配确认状态
+    def _match_issue_status(zone, category, item, field="", old_val="", new_val=""):
+        """尝试从问题单匹配变更的确认状态"""
+        if not prev_issues:
+            return "pending", "", "", ""
 
-    for bid in booth_detail.get("removed", []):
-        booth = next((b for b in old_booths if b.get("id") == bid), None)
-        zone = booth.get("zone", "") if booth else ""
-        if zone and zone in zone_summary:
-            entry = {
-                "type": "删除",
-                "item": bid,
-                "field": "展位",
-                "old_value": booth.get("company", "") if booth else bid,
-                "new_value": "",
-            }
-            zone_summary[zone]["booth_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+        # 策略1：精确匹配 - 用相同的算法生成 issue_id
+        message = f"{field}: {old_val} -> {new_val}" if field else f"{old_val} -> {new_val}"
+        issue_id = _generate_issue_id(category, item, message, zone)
+        if issue_id in prev_issues:
+            iss = prev_issues[issue_id]
+            if iss.get("waived"):
+                return "waived", iss.get("owner", ""), iss.get("suggestion", ""), ""
+            if iss.get("confirmed"):
+                return "confirmed", iss.get("owner", ""), iss.get("suggestion", ""), ""
 
-    # 展位字段变更：重点看联系人相关
-    booth_field_changes = booth_detail.get("field_changes", {})
-    contact_fields = {"contact", "phone", "email", "company"}
-    for bid, fields in booth_field_changes.items():
-        booth = next((b for b in new_booths if b.get("id") == bid), None)
-        zone = _get_zone_by_booth(bid)
+        # 策略2：模糊匹配 - 同展区 + 同对象 + 同分类
+        for iss_id, iss in prev_issues.items():
+            if iss.get("zone") == zone and iss.get("item") == item:
+                # 分类模糊匹配
+                cat_match = False
+                iss_cat = iss.get("category", "")
+                if category in ("展商资料", "展位") and iss_cat in ("展商资料", "展位", "资源关联"):
+                    cat_match = True
+                elif category == "资源文件" and iss_cat in ("资源", "资源关联"):
+                    cat_match = True
+                elif category == "直播时间" and iss_cat == "日程":
+                    cat_match = True
+                elif category == "嘉宾信息" and iss_cat == "嘉宾":
+                    cat_match = True
+
+                if cat_match:
+                    if iss.get("waived"):
+                        return "waived", iss.get("owner", ""), iss.get("suggestion", ""), ""
+                    if iss.get("confirmed"):
+                        return "confirmed", iss.get("owner", ""), iss.get("suggestion", ""), ""
+
+        return "pending", "", "", ""
+
+    section_key_map = {
+        "展商资料": "booth_changes",
+        "资源文件": "asset_changes",
+        "直播时间": "schedule_changes",
+        "嘉宾信息": "avatar_changes",
+    }
+
+    def _add_change(zone, section, entry):
+        """添加一条变更到对应展区的对应分类"""
         if not zone or zone not in zone_summary:
-            # 试旧数据
-            old_booth = next((b for b in old_booths if b.get("id") == bid), None)
-            zone = old_booth.get("zone", "") if old_booth else ""
+            # 尝试从 booth_id 推导
+            bid = entry.get("item", "")
+            zone = _get_zone_by_booth(bid)
             if not zone or zone not in zone_summary:
-                continue
+                return
 
-        for field_name, change in fields.items():
-            field_label = field_name
-            if field_name in contact_fields:
-                field_label = f"展商{field_name}"
-            entry = {
+        status, owner, suggestion, confirm_time = _match_issue_status(
+            zone, section, entry["item"],
+            entry.get("field", ""),
+            entry.get("old_value", ""),
+            entry.get("new_value", ""),
+        )
+        entry["status"] = status
+        entry["owner"] = owner
+        entry["note"] = suggestion
+        entry["confirm_time"] = confirm_time
+
+        key = section_key_map.get(section, "booth_changes")
+        zone_summary[zone][key].append(entry)
+        zone_summary[zone]["total_changes"] += 1
+
+        if status == "confirmed":
+            zone_summary[zone]["confirmed_changes"] += 1
+        elif status == "waived":
+            zone_summary[zone]["waived_changes"] += 1
+        else:
+            zone_summary[zone]["pending_changes"] += 1
+
+    # 分类键名映射（英文 -> 中文）
+    cat_map = {
+        "booths": "展位",
+        "assets": "资源",
+        "avatars": "嘉宾",
+        "schedules": "日程",
+    }
+
+    # 展位变更
+    booth_detail = diff.get("details", {}).get(cat_map["booths"], {})
+    old_booth_map = {b["id"]: b for b in old_booths}
+    new_booth_map = {b["id"]: b for b in new_booths}
+
+    # 新增展位
+    for bid in booth_detail.get("added", []):
+        booth = new_booth_map.get(bid, {})
+        zone = booth.get("zone", "")
+        if not zone:
+            continue
+        if zone not in zone_summary:
+            zone_summary[zone] = {
+                "zone": zone,
+                "owner": "",
+                "total_changes": 0,
+                "pending_changes": 0,
+                "confirmed_changes": 0,
+                "waived_changes": 0,
+                "booth_changes": [],
+                "asset_changes": [],
+                "avatar_changes": [],
+                "schedule_changes": [],
+            }
+        _add_change(zone, "展商资料", {
+            "type": "新增",
+            "item": bid,
+            "field": "展位",
+            "old_value": "",
+            "new_value": booth.get("company", bid),
+        })
+        # 新增展位的联系人信息也列出来
+        for field in ["contact", "phone", "email"]:
+            if booth.get(field):
+                field_label = {"contact": "联系人", "phone": "电话", "email": "邮箱"}[field]
+                _add_change(zone, "展商资料", {
+                    "type": "新增",
+                    "item": bid,
+                    "field": field_label,
+                    "old_value": "",
+                    "new_value": booth[field],
+                })
+
+    # 删除展位
+    for bid in booth_detail.get("removed", []):
+        booth = old_booth_map.get(bid, {})
+        zone = booth.get("zone", "")
+        if not zone:
+            continue
+        if zone not in zone_summary:
+            zone_summary[zone] = {
+                "zone": zone,
+                "owner": "",
+                "total_changes": 0,
+                "pending_changes": 0,
+                "confirmed_changes": 0,
+                "waived_changes": 0,
+                "booth_changes": [],
+                "asset_changes": [],
+                "avatar_changes": [],
+                "schedule_changes": [],
+            }
+        _add_change(zone, "展商资料", {
+            "type": "删除",
+            "item": bid,
+            "field": "展位",
+            "old_value": booth.get("company", bid),
+            "new_value": "",
+        })
+
+    # 展位字段变更
+    booth_field_changes = booth_detail.get("field_changes", {})
+    contact_field_map = {
+        "company": "公司名称",
+        "contact": "联系人",
+        "phone": "联系电话",
+        "email": "邮箱",
+        "model": "模型文件",
+        "poster": "海报文件",
+        "logo": "Logo文件",
+        "zone": "所属展区",
+    }
+    for bid, changes in booth_field_changes.items():
+        zone = _get_zone_by_booth(bid)
+        if not zone:
+            # 试试旧数据
+            old_booth = old_booth_map.get(bid, {})
+            zone = old_booth.get("zone", "")
+        if not zone:
+            continue
+
+        for change in changes:
+            field_name = change["field"]
+            field_label = contact_field_map.get(field_name, field_name)
+            _add_change(zone, "展商资料", {
                 "type": "修改",
                 "item": bid,
                 "field": field_label,
                 "old_value": str(change.get("old", "")),
                 "new_value": str(change.get("new", "")),
-            }
-            zone_summary[zone]["booth_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+            })
 
     # 资源变更
-    asset_detail = diff.get("details", {}).get("assets", {})
+    asset_detail = diff.get("details", {}).get(cat_map["assets"], {})
     new_assets = new_data.get("assets", [])
     old_assets = old_data.get("assets", [])
+    new_asset_map = {a["id"]: a for a in new_assets}
+    old_asset_map = {a["id"]: a for a in old_assets}
+
     for aid in asset_detail.get("added", []):
-        asset = next((a for a in new_assets if a.get("id") == aid), None)
-        bid = asset.get("booth_id", "") if asset else ""
+        asset = new_asset_map.get(aid, {})
+        bid = asset.get("booth_id", "")
         zone = _get_zone_by_booth(bid)
-        if zone and zone in zone_summary:
-            entry = {
+        if zone:
+            _add_change(zone, "资源文件", {
                 "type": "新增",
                 "item": aid,
-                "field": "资源文件",
+                "field": "资源",
                 "old_value": "",
-                "new_value": f"{asset.get('name','')} ({asset.get('type','')})" if asset else aid,
-            }
-            zone_summary[zone]["asset_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+                "new_value": f"{asset.get('name','')} ({asset.get('type','')})",
+            })
 
     for aid in asset_detail.get("removed", []):
-        asset = next((a for a in old_assets if a.get("id") == aid), None)
-        bid = asset.get("booth_id", "") if asset else ""
+        asset = old_asset_map.get(aid, {})
+        bid = asset.get("booth_id", "")
         zone = _get_zone_by_booth(bid)
-        if zone and zone in zone_summary:
-            entry = {
+        if zone:
+            _add_change(zone, "资源文件", {
                 "type": "删除",
                 "item": aid,
-                "field": "资源文件",
-                "old_value": f"{asset.get('name','')} ({asset.get('type','')})" if asset else aid,
+                "field": "资源",
+                "old_value": f"{asset.get('name','')} ({asset.get('type','')})",
                 "new_value": "",
-            }
-            zone_summary[zone]["asset_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+            })
 
-    # 日程变更（重点看直播时间）
-    schedule_detail = diff.get("details", {}).get("schedules", {})
-    new_schedules = new_data.get("schedules", [])
-    old_schedules = old_data.get("schedules", [])
-
-    for sid in schedule_detail.get("added", []):
-        s = next((x for x in new_schedules if x.get("id") == sid), None)
-        zone = s.get("zone", "") if s else ""
+    # 资源字段变更
+    asset_field_changes = asset_detail.get("field_changes", {})
+    asset_field_map = {
+        "name": "资源名称",
+        "type": "资源类型",
+        "filename": "文件名",
+        "booth_id": "所属展位",
+        "status": "状态",
+    }
+    for aid, changes in asset_field_changes.items():
+        asset = new_asset_map.get(aid, {})
+        bid = asset.get("booth_id", "")
+        zone = _get_zone_by_booth(bid)
         if not zone:
-            zone = _get_zone_by_booth(s.get("booth_id", "")) if s else ""
-        if zone and zone in zone_summary:
-            entry = {
-                "type": "新增",
-                "item": s.get("title", sid) if s else sid,
-                "field": "直播场次",
-                "old_value": "",
-                "new_value": f"{s.get('start','')} ~ {s.get('end','')}" if s else "",
-            }
-            zone_summary[zone]["schedule_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
-
-    for sid in schedule_detail.get("removed", []):
-        s = next((x for x in old_schedules if x.get("id") == sid), None)
-        zone = s.get("zone", "") if s else ""
+            old_asset = old_asset_map.get(aid, {})
+            zone = _get_zone_by_booth(old_asset.get("booth_id", ""))
         if not zone:
-            zone = _get_zone_by_booth(s.get("booth_id", "")) if s else ""
-        if zone and zone in zone_summary:
-            entry = {
-                "type": "删除",
-                "item": s.get("title", sid) if s else sid,
-                "field": "直播场次",
-                "old_value": f"{s.get('start','')} ~ {s.get('end','')}" if s else "",
-                "new_value": "",
-            }
-            zone_summary[zone]["schedule_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+            continue
 
-    sched_field_changes = schedule_detail.get("field_changes", {})
-    time_fields = {"start", "end"}
-    for sid, fields in sched_field_changes.items():
-        s = next((x for x in new_schedules if x.get("id") == sid), None)
-        zone = s.get("zone", "") if s else ""
-        if not zone:
-            zone = _get_zone_by_booth(s.get("booth_id", "")) if s else ""
-        if not zone or zone not in zone_summary:
-            old_s = next((x for x in old_schedules if x.get("id") == sid), None)
-            zone = old_s.get("zone", "") if old_s else ""
-            if not zone:
-                zone = _get_zone_by_booth(old_s.get("booth_id", "")) if old_s else ""
-            if not zone or zone not in zone_summary:
-                continue
-
-        for field_name, change in fields.items():
-            if field_name in time_fields:
-                field_label = "直播时间"
-            else:
-                field_label = field_name
-            entry = {
+        for change in changes:
+            field_name = change["field"]
+            field_label = asset_field_map.get(field_name, field_name)
+            _add_change(zone, "资源文件", {
                 "type": "修改",
-                "item": s.get("title", sid) if s else sid,
+                "item": aid,
                 "field": field_label,
                 "old_value": str(change.get("old", "")),
                 "new_value": str(change.get("new", "")),
-            }
-            zone_summary[zone]["schedule_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+            })
+
+    # 日程变更
+    schedule_detail = diff.get("details", {}).get(cat_map["schedules"], {})
+    new_schedules = new_data.get("schedules", [])
+    old_schedules = old_data.get("schedules", [])
+    new_sched_map = {s["id"]: s for s in new_schedules} if new_schedules else {}
+    old_sched_map = {s["id"]: s for s in old_schedules} if old_schedules else {}
+
+    def _get_schedule_zone(s):
+        if s.get("zone"):
+            return s["zone"]
+        if s.get("booth_id"):
+            return _get_zone_by_booth(s["booth_id"])
+        return ""
+
+    for sid in schedule_detail.get("added", []):
+        s = new_sched_map.get(sid, {})
+        zone = _get_schedule_zone(s)
+        if zone:
+            if zone not in zone_summary:
+                zone_summary[zone] = {
+                    "zone": zone,
+                    "owner": "",
+                    "total_changes": 0,
+                    "pending_changes": 0,
+                    "confirmed_changes": 0,
+                    "waived_changes": 0,
+                    "booth_changes": [],
+                    "asset_changes": [],
+                    "avatar_changes": [],
+                    "schedule_changes": [],
+                }
+            _add_change(zone, "直播时间", {
+                "type": "新增",
+                "item": s.get("title", sid),
+                "field": "直播场次",
+                "old_value": "",
+                "new_value": f"{s.get('start','')} ~ {s.get('end','')}",
+            })
+
+    for sid in schedule_detail.get("removed", []):
+        s = old_sched_map.get(sid, {})
+        zone = _get_schedule_zone(s)
+        if zone:
+            if zone not in zone_summary:
+                zone_summary[zone] = {
+                    "zone": zone,
+                    "owner": "",
+                    "total_changes": 0,
+                    "pending_changes": 0,
+                    "confirmed_changes": 0,
+                    "waived_changes": 0,
+                    "booth_changes": [],
+                    "asset_changes": [],
+                    "avatar_changes": [],
+                    "schedule_changes": [],
+                }
+            _add_change(zone, "直播时间", {
+                "type": "删除",
+                "item": s.get("title", sid),
+                "field": "直播场次",
+                "old_value": f"{s.get('start','')} ~ {s.get('end','')}",
+                "new_value": "",
+            })
+
+    # 日程字段变更
+    sched_field_changes = schedule_detail.get("field_changes", {})
+    sched_field_map = {
+        "title": "标题",
+        "start": "开始时间",
+        "end": "结束时间",
+        "speaker": "主讲人",
+        "type": "类型",
+        "booth_id": "所属展位",
+        "zone": "所属展区",
+        "status": "状态",
+    }
+    for sid, changes in sched_field_changes.items():
+        s = new_sched_map.get(sid, {})
+        zone = _get_schedule_zone(s)
+        if not zone:
+            old_s = old_sched_map.get(sid, {})
+            zone = _get_schedule_zone(old_s)
+        if not zone:
+            continue
+
+        for change in changes:
+            field_name = change["field"]
+            field_label = sched_field_map.get(field_name, field_name)
+            item_name = s.get("title", sid)
+            _add_change(zone, "直播时间", {
+                "type": "修改",
+                "item": item_name,
+                "field": field_label,
+                "old_value": str(change.get("old", "")),
+                "new_value": str(change.get("new", "")),
+            })
 
     # 嘉宾变更
-    avatar_detail = diff.get("details", {}).get("avatars", {})
+    avatar_detail = diff.get("details", {}).get(cat_map["avatars"], {})
     new_avatars = new_data.get("avatars", [])
     old_avatars = old_data.get("avatars", [])
+    new_avatar_map = {a["id"]: a for a in new_avatars}
+    old_avatar_map = {a["id"]: a for a in old_avatars}
+
     for aid in avatar_detail.get("added", []):
-        a = next((x for x in new_avatars if x.get("id") == aid), None)
-        bid = a.get("booth_id", "") if a else ""
+        a = new_avatar_map.get(aid, {})
+        bid = a.get("booth_id", "")
         zone = _get_zone_by_booth(bid)
-        if zone and zone in zone_summary:
-            entry = {
+        if zone:
+            _add_change(zone, "嘉宾信息", {
                 "type": "新增",
-                "item": a.get("name", aid) if a else aid,
+                "item": a.get("name", aid),
                 "field": "嘉宾",
                 "old_value": "",
-                "new_value": a.get("title", "") if a else "",
-            }
-            zone_summary[zone]["avatar_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+                "new_value": a.get("title", ""),
+            })
 
     for aid in avatar_detail.get("removed", []):
-        a = next((x for x in old_avatars if x.get("id") == aid), None)
-        bid = a.get("booth_id", "") if a else ""
+        a = old_avatar_map.get(aid, {})
+        bid = a.get("booth_id", "")
         zone = _get_zone_by_booth(bid)
-        if zone and zone in zone_summary:
-            entry = {
+        if zone:
+            _add_change(zone, "嘉宾信息", {
                 "type": "删除",
-                "item": a.get("name", aid) if a else aid,
+                "item": a.get("name", aid),
                 "field": "嘉宾",
-                "old_value": a.get("title", "") if a else "",
+                "old_value": a.get("title", ""),
                 "new_value": "",
-            }
-            zone_summary[zone]["avatar_changes"].append(entry)
-            zone_summary[zone]["total_changes"] += 1
+            })
 
-    # 已确认变更计数（用生成的 issue_id 匹配）
-    for zone, summary in zone_summary.items():
-        all_changes = (summary["booth_changes"] + summary["asset_changes"] +
-                       summary["schedule_changes"] + summary["avatar_changes"])
-        confirmed_count = 0
-        for change in all_changes:
-            # 用 category|item|message 的思路生成一个匹配 key
-            match_key = _generate_issue_id(
-                change["field"], change["item"],
-                f"{change['old_value']}->{change['new_value']}", zone
-            )
-            if match_key in confirmed_ids:
-                change["confirmed"] = True
-                confirmed_count += 1
-            else:
-                change["confirmed"] = False
-        summary["confirmed"] = confirmed_count
+    # 嘉宾字段变更
+    avatar_field_changes = avatar_detail.get("field_changes", {})
+    avatar_field_map = {
+        "name": "姓名",
+        "title": "头衔",
+        "company": "公司",
+        "booth_id": "所属展位",
+        "nameplate": "名牌文字",
+        "avatar": "头像",
+        "status": "状态",
+    }
+    for aid, changes in avatar_field_changes.items():
+        a = new_avatar_map.get(aid, {})
+        bid = a.get("booth_id", "")
+        zone = _get_zone_by_booth(bid)
+        if not zone:
+            old_a = old_avatar_map.get(aid, {})
+            zone = _get_zone_by_booth(old_a.get("booth_id", ""))
+        if not zone:
+            continue
+
+        for change in changes:
+            field_name = change["field"]
+            field_label = avatar_field_map.get(field_name, field_name)
+            item_name = a.get("name", aid)
+            _add_change(zone, "嘉宾信息", {
+                "type": "修改",
+                "item": item_name,
+                "field": field_label,
+                "old_value": str(change.get("old", "")),
+                "new_value": str(change.get("new", "")),
+            })
 
     # 排序：变更多的在前
-    sorted_zones = sorted(zone_summary.values(), key=lambda x: x["total_changes"], reverse=True)
-    return {z["zone"]: z for z in sorted_zones if z["total_changes"] > 0}
+    sorted_zones = sorted(
+        [z for z in zone_summary.values() if z["total_changes"] > 0],
+        key=lambda x: x["total_changes"], reverse=True
+    )
+    return {z["zone"]: z for z in sorted_zones}
 
 
 def _print_zone_diff_summary(zone_summary: dict, zone_filter: str = None):
@@ -1110,17 +1334,39 @@ def _print_zone_diff_summary(zone_summary: dict, zone_filter: str = None):
 
     # 总览
     total_all = sum(s["total_changes"] for s in zone_summary.values())
-    total_confirmed = sum(s["confirmed"] for s in zone_summary.values())
-    print_info(f"共 {len(zone_summary)} 个展区有变更，总计 {total_all} 项变更"
-               f"（已确认 {total_confirmed} 项）")
+    total_pending = sum(s["pending_changes"] for s in zone_summary.values())
+    total_confirmed = sum(s["confirmed_changes"] for s in zone_summary.values())
+    total_waived = sum(s["waived_changes"] for s in zone_summary.values())
+    print_info(f"共 {len(zone_summary)} 个展区有变更，总计 {total_all} 项变更")
+    print_info(f"  待确认: {total_pending} | 已确认: {total_confirmed} | 已豁免: {total_waived}")
     console.print()
+
+    status_map = {
+        "pending": (" ", "white", "待确认"),
+        "confirmed": ("✓", "green", "已确认"),
+        "waived": ("🚫", "yellow", "已豁免"),
+    }
 
     # 每个展区的明细
     for zone, summary in sorted(zone_summary.items()):
-        confirmed = summary["confirmed"]
         total = summary["total_changes"]
-        console.print(f"[bold magenta]📌 展区 {zone}[/bold magenta] "
-                      f"({total} 项变更，已确认 {confirmed} 项)")
+        pending = summary["pending_changes"]
+        confirmed = summary["confirmed_changes"]
+        waived = summary["waived_changes"]
+        owner = summary.get("owner", "")
+
+        header = f"[bold magenta]📌 展区 {zone}[/bold magenta] "
+        header += f"({total} 项变更"
+        if pending:
+            header += f", [yellow]待确认 {pending}[/yellow]"
+        if confirmed:
+            header += f", [green]已确认 {confirmed}[/green]"
+        if waived:
+            header += f", [dim]已豁免 {waived}[/dim]"
+        header += ")"
+        if owner:
+            header += f" 负责人: {owner}"
+        console.print(header)
 
         sections = [
             ("展商资料", summary["booth_changes"]),
@@ -1136,17 +1382,18 @@ def _print_zone_diff_summary(zone_summary: dict, zone_filter: str = None):
             for c in changes:
                 type_colors = {"新增": "green", "删除": "red", "修改": "yellow"}
                 tc = type_colors.get(c["type"], "white")
-                confirmed_mark = "[green]✓[/green]" if c.get("confirmed") else " "
+                mark, color, _ = status_map.get(c.get("status", "pending"), (" ", "white", ""))
                 rows.append([
-                    confirmed_mark,
+                    f"[{color}]{mark}[/{color}]",
                     f"[{tc}]{c['type']}[/{tc}]",
                     c["item"],
                     c["field"],
                     c["old_value"],
                     c["new_value"],
+                    c.get("owner", ""),
                 ])
             print_table(f"  {section_name} ({len(changes)} 项)",
-                        ["确认", "类型", "对象", "字段", "旧值", "新值"], rows)
+                        ["状态", "类型", "对象", "字段", "旧值", "新值", "负责人"], rows)
 
         console.print()
 
@@ -1161,6 +1408,12 @@ def _export_zone_diff_csv(zone_summary: dict, output: str, zone_filter: str = No
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    status_label_map = {
+        "pending": "待确认",
+        "confirmed": "已确认",
+        "waived": "已豁免",
+    }
+
     rows = []
     for zone, summary in zone_summary.items():
         for section_name, changes in [
@@ -1170,6 +1423,7 @@ def _export_zone_diff_csv(zone_summary: dict, output: str, zone_filter: str = No
             ("嘉宾信息", summary["avatar_changes"]),
         ]:
             for c in changes:
+                status_label = status_label_map.get(c.get("status", "pending"), "待确认")
                 rows.append({
                     "zone": zone,
                     "category": section_name,
@@ -1178,21 +1432,121 @@ def _export_zone_diff_csv(zone_summary: dict, output: str, zone_filter: str = No
                     "field": c["field"],
                     "old_value": c["old_value"],
                     "new_value": c["new_value"],
-                    "confirmed": "是" if c.get("confirmed") else "否",
-                    "owner": "",
-                    "note": "",
+                    "status": status_label,
+                    "owner": c.get("owner", ""),
+                    "note": c.get("note", ""),
+                    "confirm_time": c.get("confirm_time", ""),
                 })
 
+    fieldnames = ["zone", "category", "type", "item", "field",
+                  "old_value", "new_value", "status", "owner", "note", "confirm_time"]
     with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv_module.DictWriter(
-            f, fieldnames=["zone", "category", "type", "item", "field",
-                           "old_value", "new_value", "confirmed", "owner", "note"]
-        )
+        writer = csv_module.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
 
     print_success(f"确认清单已导出: {output_path}")
+
+
+def _generate_zone_diff_html(zone_summary: dict, versions: dict) -> str:
+    """生成展区变更确认的 HTML 报告"""
+    status_label_map = {
+        "pending": "待确认",
+        "confirmed": "已确认",
+        "waived": "已豁免",
+    }
+    status_color_map = {
+        "pending": "#f0ad4e",
+        "confirmed": "#5cb85c",
+        "waived": "#999",
+    }
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>版本变更确认清单</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        h1 {{ color: #333; }}
+        h2 {{ color: #9c27b0; border-bottom: 2px solid #9c27b0; padding-bottom: 5px; }}
+        h3 {{ color: #555; }}
+        table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }}
+        th {{ background-color: #f5f5f5; }}
+        .status {{ display: inline-block; padding: 2px 8px; border-radius: 3px; color: white; font-size: 12px; }}
+        .summary {{ background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+        .type-add {{ color: #4caf50; }}
+        .type-del {{ color: #f44336; }}
+        .type-mod {{ color: #ff9800; }}
+    </style>
+</head>
+<body>
+    <h1>版本变更确认清单</h1>
+    <p>版本对比: {versions.get('old', '')} → {versions.get('new', '')}</p>
+    <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+"""
+
+    total_all = sum(s["total_changes"] for s in zone_summary.values())
+    total_pending = sum(s["pending_changes"] for s in zone_summary.values())
+    total_confirmed = sum(s["confirmed_changes"] for s in zone_summary.values())
+    total_waived = sum(s["waived_changes"] for s in zone_summary.values())
+
+    html += f"""
+    <div class="summary">
+        <h3>变更汇总</h3>
+        <p>展区数量: {len(zone_summary)}</p>
+        <p>总变更数: {total_all} 项</p>
+        <p>待确认: <strong style="color:#f0ad4e">{total_pending}</strong> 项</p>
+        <p>已确认: <strong style="color:#5cb85c">{total_confirmed}</strong> 项</p>
+        <p>已豁免: <strong style="color:#999">{total_waived}</strong> 项</p>
+    </div>
+"""
+
+    type_class_map = {"新增": "type-add", "删除": "type-del", "修改": "type-mod"}
+
+    for zone, summary in sorted(zone_summary.items()):
+        html += f"<h2>📌 展区 {zone}</h2>"
+        html += f"<p>共 {summary['total_changes']} 项变更"
+        if summary["pending_changes"]:
+            html += f"，待确认 {summary['pending_changes']}"
+        if summary["confirmed_changes"]:
+            html += f"，已确认 {summary['confirmed_changes']}"
+        if summary["waived_changes"]:
+            html += f"，已豁免 {summary['waived_changes']}"
+        html += "</p>"
+
+        sections = [
+            ("展商资料", summary["booth_changes"]),
+            ("资源文件", summary["asset_changes"]),
+            ("直播时间", summary["schedule_changes"]),
+            ("嘉宾信息", summary["avatar_changes"]),
+        ]
+
+        for section_name, changes in sections:
+            if not changes:
+                continue
+            html += f"<h3>{section_name} ({len(changes)} 项)</h3>"
+            html += "<table><tr><th>状态</th><th>类型</th><th>对象</th><th>字段</th><th>旧值</th><th>新值</th><th>负责人</th></tr>"
+            for c in changes:
+                status = c.get("status", "pending")
+                status_label = status_label_map.get(status, "待确认")
+                status_color = status_color_map.get(status, "#f0ad4e")
+                type_class = type_class_map.get(c["type"], "")
+                html += f"<tr>"
+                html += f'<td><span class="status" style="background:{status_color}">{status_label}</span></td>'
+                html += f'<td class="{type_class}">{c["type"]}</td>'
+                html += f"<td>{c['item']}</td>"
+                html += f"<td>{c['field']}</td>"
+                html += f"<td>{c['old_value']}</td>"
+                html += f"<td>{c['new_value']}</td>"
+                html += f"<td>{c.get('owner', '')}</td>"
+                html += "</tr>"
+            html += "</table>"
+
+    html += "</body></html>"
+    return html
 
 
 def load_release_data(project_path: str, history: list, version: str) -> dict:

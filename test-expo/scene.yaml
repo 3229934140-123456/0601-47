@@ -6,7 +6,7 @@ assets:
   name: 主视觉海报
   path: assets\posters\主视觉海报
   size: 18
-  status: confirmed
+  status: approved
   type: poster
 - booth_id: A-001
   filename: 展位3D模型
@@ -15,7 +15,7 @@ assets:
   name: 展位3D模型
   path: assets\models\展位3D模型
   size: 17
-  status: uploaded
+  status: approved
   type: model
 avatars:
 - avatar: ''
@@ -166,6 +166,19 @@ scene:
   status: draft
   theme: tech
   welcome_message: 欢迎参加2024科技博览会！请探索各展位体验精彩内容。
+  zone_info:
+    A:
+      deadline: '2026-06-15'
+      owner: 张三
+      status: in-progress
+    B:
+      deadline: '2026-06-10'
+      owner: 李四
+      status: review
+    C:
+      deadline: '2026-06-20'
+      owner: 王五
+      status: not-started
   zones:
   - A
   - B

@@ -205,27 +205,30 @@ def _export_csv_all(base_output: Path, report_data: dict):
 
 def _generate_html_report(data, report_type):
     """生成HTML格式报表"""
-    html = """
+    generated_at = data.get("generated_at", "")
+    zone = data.get("zone", "all")
+
+    html = f"""
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <title>参展统计报表</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #4CAF50; color: white; }
-        tr:nth-child(even) { background-color: #f2f2f2; }
-        .summary { background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        h1 {{ color: #333; }}
+        table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #4CAF50; color: white; }}
+        tr:nth-child(even) {{ background-color: #f2f2f2; }}
+        .summary {{ background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
     </style>
 </head>
 <body>
     <h1>元宇宙参展统计报表</h1>
     <p>生成时间: {generated_at}</p>
     <p>展区: {zone}</p>
-""".format(generated_at=data.get("generated_at", ""), zone=data.get("zone", "all"))
+"""
 
     if "summary" in data:
         s = data["summary"]
@@ -246,21 +249,21 @@ def _generate_html_report(data, report_type):
         html += "</table>"
 
     if "assets" in data:
-        html += "<h2>资源列表</h2><table><tr><th>ID</th><th>名称</th><th>类型</th><th>展位</th><th>大小</th></tr>"
+        html += "<h2>资源列表</h2><table><tr><th>ID</th><th>名称</th><th>类型</th><th>展位</th><th>大小</th><th>状态</th></tr>"
         for a in data["assets"]:
-            html += f"<tr><td>{a.get('id','')}</td><td>{a.get('name','')}</td><td>{a.get('type','')}</td><td>{a.get('booth_id','')}</td><td>{a.get('size',0)/1024:.1f}KB</td></tr>"
+            html += f"<tr><td>{a.get('id','')}</td><td>{a.get('name','')}</td><td>{a.get('type','')}</td><td>{a.get('booth_id','')}</td><td>{a.get('size',0)/1024:.1f}KB</td><td>{a.get('status','-')}</td></tr>"
         html += "</table>"
 
     if "schedules" in data:
-        html += "<h2>日程列表</h2><table><tr><th>标题</th><th>开始</th><th>结束</th><th>主讲人</th><th>类型</th></tr>"
+        html += "<h2>日程列表</h2><table><tr><th>标题</th><th>开始</th><th>结束</th><th>主讲人</th><th>类型</th><th>状态</th></tr>"
         for s in data["schedules"]:
-            html += f"<tr><td>{s.get('title','')}</td><td>{s.get('start','')}</td><td>{s.get('end','')}</td><td>{s.get('speaker','')}</td><td>{s.get('type','')}</td></tr>"
+            html += f"<tr><td>{s.get('title','')}</td><td>{s.get('start','')}</td><td>{s.get('end','')}</td><td>{s.get('speaker','')}</td><td>{s.get('type','')}</td><td>{s.get('status','-')}</td></tr>"
         html += "</table>"
 
     if "avatars" in data:
-        html += "<h2>嘉宾列表</h2><table><tr><th>姓名</th><th>头衔</th><th>公司</th><th>展位</th></tr>"
+        html += "<h2>嘉宾列表</h2><table><tr><th>姓名</th><th>头衔</th><th>公司</th><th>展位</th><th>状态</th></tr>"
         for a in data["avatars"]:
-            html += f"<tr><td>{a.get('name','')}</td><td>{a.get('title','')}</td><td>{a.get('company','')}</td><td>{a.get('booth_id','')}</td></tr>"
+            html += f"<tr><td>{a.get('name','')}</td><td>{a.get('title','')}</td><td>{a.get('company','')}</td><td>{a.get('booth_id','')}</td><td>{a.get('status','-')}</td></tr>"
         html += "</table>"
 
     html += "</body></html>"

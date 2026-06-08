@@ -12,6 +12,15 @@ from rich.text import Text
 console = Console()
 
 
+def parse_ids(id_list: Tuple[str, ...]) -> set:
+    """解析 --ids 参数，支持逗号分隔和多次指定"""
+    result = set()
+    for item in id_list:
+        parts = [p.strip() for p in item.split(",") if p.strip()]
+        result.update(parts)
+    return result
+
+
 def validate_booth_id(booth_id: str) -> Tuple[bool, str]:
     pattern = r'^[A-Z]{1,3}-\d{3,4}$'
     if not re.match(pattern, booth_id):

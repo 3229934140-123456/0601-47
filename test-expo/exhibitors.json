@@ -1,0 +1,8 @@
+[
+  {"id": "A-001", "company": "未来科技有限公司", "contact": "张经理", "email": "zhang@future.com", "phone": "13800138001", "description": "专注AI和元宇宙技术"},
+  {"id": "A-002", "company": "云端网络科技", "contact": "李总监", "email": "li@cloud.com", "phone": "13800138002", "description": "云计算解决方案"},
+  {"id": "A-003", "company": "智能硬件创新", "contact": "王工", "email": "wang@smart.com", "phone": "13800138003", "description": "VR/AR设备研发"},
+  {"id": "B-001", "company": "数字孪生工作室", "contact": "陈老师", "email": "chen@digital.com", "phone": "13900139001", "description": "数字孪生技术"},
+  {"id": "B-002", "company": "虚拟仿真实验室", "contact": "刘博士", "email": "liu@sim.com", "phone": "13900139002", "description": "虚拟仿真培训"},
+  {"id": "C-001", "company": "区块链研究院", "contact": "赵院长", "email": "zhao@chain.com", "phone": "13700137001", "description": "Web3.0与NFT"}
+]

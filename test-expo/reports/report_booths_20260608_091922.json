@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-06-08T09:19:22.867923",
+  "zone": "A",
+  "booths": [
+    {
+      "company": "未来科技有限公司",
+      "contact": "张经理",
+      "description": "专注AI和元宇宙技术",
+      "email": "zhang@future.com",
+      "id": "A-001",
+      "logo": "",
+      "model": "assets\\models\\展位3D模型",
+      "phone": "13800138001",
+      "poster": "assets\\posters\\主视觉海报",
+      "zone": "A"
+    },
+    {
+      "company": "云端网络科技",
+      "contact": "李总监",
+      "description": "云计算解决方案",
+      "email": "li@cloud.com",
+      "id": "A-002",
+      "logo": "",
+      "model": "",
+      "phone": "13800138002",
+      "poster": "",
+      "zone": "A"
+    },
+    {
+      "company": "智能硬件创新",
+      "contact": "王工",
+      "description": "VR/AR设备研发",
+      "email": "wang@smart.com",
+      "id": "A-003",
+      "logo": "",
+      "model": "",
+      "phone": "13800138003",
+      "poster": "",
+      "zone": "A"
+    }
+  ]
+}

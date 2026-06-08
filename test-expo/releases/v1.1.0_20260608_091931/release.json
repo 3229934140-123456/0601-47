@@ -1,0 +1,250 @@
+{
+  "version": "v1.1.0",
+  "timestamp": "20260608_091931",
+  "note": "第二次发布",
+  "scene": {
+    "name": "test-expo",
+    "navigation_points": [
+      {
+        "booth_id": "A-001",
+        "id": "nav-001",
+        "name": "A-001 导航点",
+        "position": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "type": "entrance",
+        "zone": "A"
+      },
+      {
+        "booth_id": "A-002",
+        "id": "nav-002",
+        "name": "A-002 导航点",
+        "position": {
+          "x": 5.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "type": "booth",
+        "zone": "A"
+      },
+      {
+        "booth_id": "A-003",
+        "id": "nav-003",
+        "name": "A-003 导航点",
+        "position": {
+          "x": 10.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "type": "booth",
+        "zone": "A"
+      },
+      {
+        "booth_id": "B-001",
+        "id": "nav-004",
+        "name": "B-001 导航点",
+        "position": {
+          "x": 15.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "type": "booth",
+        "zone": "B"
+      },
+      {
+        "booth_id": "B-002",
+        "id": "nav-005",
+        "name": "B-002 导航点",
+        "position": {
+          "x": 20.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "type": "booth",
+        "zone": "B"
+      },
+      {
+        "booth_id": "C-001",
+        "id": "nav-006",
+        "name": "C-001 导航点",
+        "position": {
+          "x": 25.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "type": "booth",
+        "zone": "C"
+      }
+    ],
+    "status": "published",
+    "theme": "tech",
+    "welcome_message": "欢迎参加2024科技博览会！请探索各展位体验精彩内容。",
+    "zones": [
+      "A",
+      "B",
+      "C"
+    ]
+  },
+  "booths": [
+    {
+      "company": "未来科技有限公司",
+      "contact": "张经理",
+      "description": "专注AI和元宇宙技术",
+      "email": "zhang@future.com",
+      "id": "A-001",
+      "logo": "",
+      "model": "assets\\models\\展位3D模型",
+      "phone": "13800138001",
+      "poster": "assets\\posters\\主视觉海报",
+      "zone": "A"
+    },
+    {
+      "company": "云端网络科技",
+      "contact": "李总监",
+      "description": "云计算解决方案",
+      "email": "li@cloud.com",
+      "id": "A-002",
+      "logo": "",
+      "model": "",
+      "phone": "13800138002",
+      "poster": "",
+      "zone": "A"
+    },
+    {
+      "company": "智能硬件创新",
+      "contact": "王工",
+      "description": "VR/AR设备研发",
+      "email": "wang@smart.com",
+      "id": "A-003",
+      "logo": "",
+      "model": "",
+      "phone": "13800138003",
+      "poster": "",
+      "zone": "A"
+    },
+    {
+      "company": "数字孪生工作室",
+      "contact": "陈老师",
+      "description": "数字孪生技术",
+      "email": "chen@digital.com",
+      "id": "B-001",
+      "logo": "",
+      "model": "",
+      "phone": "13900139001",
+      "poster": "",
+      "zone": "B"
+    },
+    {
+      "company": "虚拟仿真实验室",
+      "contact": "刘博士",
+      "description": "虚拟仿真培训",
+      "email": "liu@sim.com",
+      "id": "B-002",
+      "logo": "",
+      "model": "",
+      "phone": "13900139002",
+      "poster": "",
+      "zone": "B"
+    },
+    {
+      "company": "区块链研究院",
+      "contact": "赵院长",
+      "description": "Web3.0与NFT",
+      "email": "zhao@chain.com",
+      "id": "C-001",
+      "logo": "",
+      "model": "",
+      "phone": "13700137001",
+      "poster": "",
+      "zone": "C"
+    },
+    {
+      "company": "测试公司",
+      "contact": "",
+      "description": "",
+      "email": "",
+      "id": "D-001",
+      "logo": "",
+      "model": "",
+      "phone": "",
+      "poster": "",
+      "zone": "D"
+    }
+  ],
+  "assets": [
+    {
+      "booth_id": "A-001",
+      "filename": "主视觉海报",
+      "hash": "0bd424fd528a8a872ca164a0dae8d06221dd7244879f55ede94f8dc6bee91f7b",
+      "id": "asset-0001",
+      "name": "主视觉海报",
+      "path": "assets\\posters\\主视觉海报",
+      "size": 18,
+      "status": "uploaded",
+      "type": "poster"
+    },
+    {
+      "booth_id": "A-001",
+      "filename": "展位3D模型",
+      "hash": "549778b0dabd07f4203d9df8f62d1f6abd67f8bcafd3a9284b1d3b1dc7d96707",
+      "id": "asset-0002",
+      "name": "展位3D模型",
+      "path": "assets\\models\\展位3D模型",
+      "size": 17,
+      "status": "uploaded",
+      "type": "model"
+    }
+  ],
+  "avatars": [
+    {
+      "avatar": "",
+      "booth_id": "A-001",
+      "company": "未来科技有限公司",
+      "id": "guest-0001",
+      "name": "李明",
+      "nameplate": "李明",
+      "title": "首席技术官"
+    },
+    {
+      "avatar": "",
+      "booth_id": "A-002",
+      "company": "云端网络科技",
+      "id": "guest-0002",
+      "name": "张华",
+      "nameplate": "张华",
+      "title": "产品总监"
+    }
+  ],
+  "schedules": [
+    {
+      "booth_id": "A-001",
+      "end": "2024-06-15 11:30",
+      "id": "sch-0001",
+      "speaker": "李明",
+      "start": "2024-06-15 10:00",
+      "status": "scheduled",
+      "title": "AI技术前沿分享",
+      "type": "keynote",
+      "zone": "A"
+    },
+    {
+      "booth_id": "A-003",
+      "end": "2024-06-15 16:00",
+      "id": "sch-0002",
+      "speaker": "王工",
+      "start": "2024-06-15 14:00",
+      "status": "scheduled",
+      "title": "VR/AR硬件体验",
+      "type": "workshop",
+      "zone": "A"
+    }
+  ],
+  "stats": {
+    "booth_count": 7,
+    "asset_count": 2,
+    "avatar_count": 2,
+    "schedule_count": 2
+  }
+}

@@ -164,6 +164,8 @@ def zone_check(ctx, zone, detail):
             print_warning(f"缺联系人的展位: {', '.join(missing_contact)}")
         if missing_avatar_img:
             print_warning(f"缺头像的嘉宾: {', '.join(missing_avatar_img)}")
+        if booths_without_schedule:
+            print_info(f"无直播安排的展位: {', '.join(booths_without_schedule)}")
 
     total_issues = sum(len(items) for _, items, _ in checks)
     console.print()

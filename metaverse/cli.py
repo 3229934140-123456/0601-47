@@ -9,6 +9,7 @@ from metaverse.commands import (
     publish_cli,
     report_cli,
     zone_cli,
+    ops_cli,
 )
 
 
@@ -23,12 +24,13 @@ def main(ctx, project):
     命令组：
       scene     场景管理（创建项目、欢迎语、导航点）
       booth     展位管理（校验、导入、过滤）
-      asset     资源管理（上传、清单、检查）
-      avatar    嘉宾管理（头像、名牌）
+      asset     资源管理（上传、清单、检查、状态）
+      avatar    嘉宾管理（头像、名牌、状态）
       schedule  日程管理（直播时段）
-      publish   发布管理（打包、回滚）
+      publish   发布管理（打包、回滚、对比、预检）
       report    报表统计（参展统计导出）
       zone      展区管理（展区概览、验收检查）
+      ops       运营协同（运营看板、进度跟踪）
     """
     ctx.ensure_object(dict)
     ctx.obj["project_path"] = project
@@ -42,6 +44,7 @@ main.add_command(schedule_cli, name="schedule")
 main.add_command(publish_cli, name="publish")
 main.add_command(report_cli, name="report")
 main.add_command(zone_cli, name="zone")
+main.add_command(ops_cli, name="ops")
 
 
 if __name__ == "__main__":

@@ -159,7 +159,7 @@ def _export_csv_single(output_path: Path, report_data: dict, report_type: str):
     field_configs = {
         "booths": ["id", "zone", "company", "contact", "email", "phone", "description"],
         "assets": ["id", "name", "type", "filename", "booth_id", "size", "status"],
-        "avatars": ["id", "name", "title", "company", "booth_id", "nameplate"],
+        "avatars": ["id", "name", "title", "company", "booth_id", "nameplate", "status"],
         "schedules": ["id", "title", "start", "end", "speaker", "booth_id", "zone", "type", "status"],
     }
     fields = field_configs.get(report_type, [])

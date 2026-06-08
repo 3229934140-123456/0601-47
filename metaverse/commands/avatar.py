@@ -75,8 +75,9 @@ def add_avatar(ctx, name, avatar, title, company, booth, nameplate):
 @click.option("--booth", "-b", help="按展位过滤")
 @click.option("--company", "-c", help="按公司过滤")
 @click.option("--zone", "-z", help="按展区过滤")
+@click.option("--status", "-s", help="按状态过滤")
 @click.pass_context
-def list_avatars(ctx, booth, company, zone):
+def list_avatars(ctx, booth, company, zone, status):
     """列出所有嘉宾"""
     project_path = ctx.obj["project_path"]
     if not is_project_dir(project_path):
@@ -94,6 +95,8 @@ def list_avatars(ctx, booth, company, zone):
     if zone:
         zone_booth_ids = {b["id"] for b in booths if b.get("zone") == zone}
         avatars = [a for a in avatars if a.get("booth_id") in zone_booth_ids]
+    if status:
+        avatars = [a for a in avatars if a.get("status", "") == status]
 
     if not avatars:
         print_warning("暂无嘉宾数据")
@@ -101,11 +104,62 @@ def list_avatars(ctx, booth, company, zone):
 
     rows = [
         [a["id"], a["name"], a.get("title", ""), a.get("company", ""),
-         a.get("booth_id", ""), "✓" if a.get("avatar") else "✗"]
+         a.get("booth_id", ""), "✓" if a.get("avatar") else "✗",
+         a.get("status", "active")]
         for a in avatars
     ]
     print_table(f"嘉宾列表 ({len(avatars)} 人)",
-                ["ID", "姓名", "头衔", "公司", "展位", "头像"], rows)
+                ["ID", "姓名", "头衔", "公司", "展位", "头像", "状态"], rows)
+
+
+@avatar_cli.command("set-status")
+@click.argument("status")
+@click.option("--ids", multiple=True, help="指定嘉宾ID")
+@click.option("--zone", "-z", help="按展区批量更新")
+@click.option("--booth", "-b", help="按展位批量更新")
+@click.option("--company", "-c", help="按公司批量更新")
+@click.pass_context
+def set_status(ctx, status, ids, zone, booth, company):
+    """批量更新嘉宾状态
+
+    STATUS 状态值，如 confirmed、pending、draft
+    """
+    project_path = ctx.obj["project_path"]
+    if not is_project_dir(project_path):
+        print_error("当前目录不是有效的场景项目")
+        raise click.Abort()
+
+    config = SceneConfig(project_path)
+    avatars = config.get("avatars", [])
+    booths = config.get("booths", [])
+
+    target_ids = set(ids) if ids else set()
+    zone_booth_ids = {b["id"] for b in booths if b.get("zone") == zone} if zone else None
+
+    updated = 0
+    for avatar in avatars:
+        aid = avatar.get("id", "")
+        match = False
+        if target_ids and aid in target_ids:
+            match = True
+        elif not target_ids:
+            zone_match = not zone or avatar.get("booth_id") in zone_booth_ids
+            booth_match = not booth or avatar.get("booth_id") == booth
+            company_match = not company or company.lower() in avatar.get("company", "").lower()
+            if zone_match and booth_match and company_match:
+                match = True
+
+        if match:
+            avatar["status"] = status
+            updated += 1
+
+    if updated == 0:
+        print_warning("没有匹配的嘉宾")
+        return
+
+    config.set("avatars", avatars)
+    config.save()
+    print_success(f"已更新 {updated} 位嘉宾的状态为: {status}")
 
 
 @avatar_cli.command("set-nameplate")

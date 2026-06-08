@@ -1,0 +1,3 @@
+﻿level,zone,category,item,message
+warning,A,资源,asset-0001,文件扩展名  与类型 poster 可能不匹配
+warning,A,资源,asset-0002,文件扩展名  与类型 model 可能不匹配

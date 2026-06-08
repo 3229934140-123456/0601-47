@@ -104,8 +104,9 @@ def upload_asset(ctx, file_path, asset_type, booth, name):
               help="按类型过滤")
 @click.option("--booth", "-b", help="按展位过滤")
 @click.option("--zone", "-z", help="按展区过滤")
+@click.option("--status", "-s", help="按状态过滤")
 @click.pass_context
-def list_assets(ctx, asset_type, booth, zone):
+def list_assets(ctx, asset_type, booth, zone, status):
     """预览资源清单"""
     project_path = ctx.obj["project_path"]
     if not is_project_dir(project_path):
@@ -123,6 +124,8 @@ def list_assets(ctx, asset_type, booth, zone):
     if zone:
         zone_booth_ids = {b["id"] for b in booths if b.get("zone") == zone}
         assets = [a for a in assets if a.get("booth_id") in zone_booth_ids]
+    if status:
+        assets = [a for a in assets if a.get("status", "") == status]
 
     if not assets:
         print_warning("暂无资源")
@@ -130,11 +133,64 @@ def list_assets(ctx, asset_type, booth, zone):
 
     rows = [
         [a["id"], a["name"], a["type"], a.get("booth_id", ""),
-         f"{a['size']/1024:.1f}KB", a["status"]]
+         f"{a['size']/1024:.1f}KB", a.get("status", "uploaded")]
         for a in assets
     ]
     print_table(f"资源清单 ({len(assets)} 个)",
                 ["ID", "名称", "类型", "展位", "大小", "状态"], rows)
+
+
+@asset_cli.command("set-status")
+@click.argument("status")
+@click.option("--ids", multiple=True, help="指定资源ID，多个用逗号分隔或多次指定")
+@click.option("--type", "-t", "asset_type",
+              type=click.Choice(["model", "poster", "logo", "video"]),
+              help="按类型批量更新")
+@click.option("--zone", "-z", help="按展区批量更新")
+@click.option("--booth", "-b", help="按展位批量更新")
+@click.pass_context
+def set_status(ctx, status, ids, asset_type, zone, booth):
+    """批量更新资源状态
+
+    STATUS 状态值，如 confirmed、pending、draft
+    """
+    project_path = ctx.obj["project_path"]
+    if not is_project_dir(project_path):
+        print_error("当前目录不是有效的场景项目")
+        raise click.Abort()
+
+    config = SceneConfig(project_path)
+    assets = config.get("assets", [])
+    booths = config.get("booths", [])
+
+    target_ids = set(ids) if ids else set()
+    zone_booth_ids = {b["id"] for b in booths if b.get("zone") == zone} if zone else None
+
+    updated = 0
+    for asset in assets:
+        aid = asset.get("id", "")
+        # 判断是否匹配筛选条件
+        match = False
+        if target_ids and aid in target_ids:
+            match = True
+        elif not target_ids:
+            type_match = not asset_type or asset.get("type") == asset_type
+            zone_match = not zone or asset.get("booth_id") in zone_booth_ids
+            booth_match = not booth or asset.get("booth_id") == booth
+            if type_match and zone_match and booth_match:
+                match = True
+
+        if match:
+            asset["status"] = status
+            updated += 1
+
+    if updated == 0:
+        print_warning("没有匹配的资源")
+        return
+
+    config.set("assets", assets)
+    config.save()
+    print_success(f"已更新 {updated} 个资源的状态为: {status}")
 
 
 @asset_cli.command("check")

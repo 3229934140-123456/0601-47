@@ -1,0 +1,21 @@
+{
+  "total": 2,
+  "errors": 0,
+  "warnings": 2,
+  "issues": [
+    {
+      "category": "资源",
+      "level": "warning",
+      "item": "asset-0001",
+      "message": "文件扩展名  与类型 poster 可能不匹配",
+      "zone": "A"
+    },
+    {
+      "category": "资源",
+      "level": "warning",
+      "item": "asset-0002",
+      "message": "文件扩展名  与类型 model 可能不匹配",
+      "zone": "A"
+    }
+  ]
+}

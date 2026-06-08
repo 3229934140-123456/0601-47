@@ -6,6 +6,7 @@ from .schedule import schedule_cli
 from .publish import publish_cli
 from .report import report_cli
 from .zone import zone_cli
+from .ops import ops_cli
 
 __all__ = [
     "scene_cli",
@@ -16,4 +17,5 @@ __all__ = [
     "publish_cli",
     "report_cli",
     "zone_cli",
+    "ops_cli",
 ]

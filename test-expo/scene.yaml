@@ -6,7 +6,7 @@ assets:
   name: 主视觉海报
   path: assets\posters\主视觉海报
   size: 18
-  status: uploaded
+  status: confirmed
   type: poster
 - booth_id: A-001
   filename: 展位3D模型
@@ -24,6 +24,7 @@ avatars:
   id: guest-0001
   name: 李明
   nameplate: 李明
+  status: pending
   title: 首席技术官
 - avatar: ''
   booth_id: A-002
@@ -31,6 +32,7 @@ avatars:
   id: guest-0002
   name: 张华
   nameplate: 张华
+  status: pending
   title: 产品总监
 booths:
 - company: 未来科技有限公司

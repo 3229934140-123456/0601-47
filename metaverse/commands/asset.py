@@ -103,8 +103,9 @@ def upload_asset(ctx, file_path, asset_type, booth, name):
               type=click.Choice(["model", "poster", "logo", "video"]),
               help="按类型过滤")
 @click.option("--booth", "-b", help="按展位过滤")
+@click.option("--zone", "-z", help="按展区过滤")
 @click.pass_context
-def list_assets(ctx, asset_type, booth):
+def list_assets(ctx, asset_type, booth, zone):
     """预览资源清单"""
     project_path = ctx.obj["project_path"]
     if not is_project_dir(project_path):
@@ -113,11 +114,15 @@ def list_assets(ctx, asset_type, booth):
 
     config = SceneConfig(project_path)
     assets = config.get("assets", [])
+    booths = config.get("booths", [])
 
     if asset_type:
         assets = [a for a in assets if a["type"] == asset_type]
     if booth:
         assets = [a for a in assets if a.get("booth_id") == booth]
+    if zone:
+        zone_booth_ids = {b["id"] for b in booths if b.get("zone") == zone}
+        assets = [a for a in assets if a.get("booth_id") in zone_booth_ids]
 
     if not assets:
         print_warning("暂无资源")

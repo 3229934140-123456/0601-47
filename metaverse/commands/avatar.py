@@ -74,8 +74,9 @@ def add_avatar(ctx, name, avatar, title, company, booth, nameplate):
 @avatar_cli.command("list")
 @click.option("--booth", "-b", help="按展位过滤")
 @click.option("--company", "-c", help="按公司过滤")
+@click.option("--zone", "-z", help="按展区过滤")
 @click.pass_context
-def list_avatars(ctx, booth, company):
+def list_avatars(ctx, booth, company, zone):
     """列出所有嘉宾"""
     project_path = ctx.obj["project_path"]
     if not is_project_dir(project_path):
@@ -84,11 +85,15 @@ def list_avatars(ctx, booth, company):
 
     config = SceneConfig(project_path)
     avatars = config.get("avatars", [])
+    booths = config.get("booths", [])
 
     if booth:
         avatars = [a for a in avatars if a.get("booth_id") == booth]
     if company:
         avatars = [a for a in avatars if company.lower() in a.get("company", "").lower()]
+    if zone:
+        zone_booth_ids = {b["id"] for b in booths if b.get("zone") == zone}
+        avatars = [a for a in avatars if a.get("booth_id") in zone_booth_ids]
 
     if not avatars:
         print_warning("暂无嘉宾数据")

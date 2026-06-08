@@ -8,6 +8,7 @@ from metaverse.commands import (
     schedule_cli,
     publish_cli,
     report_cli,
+    zone_cli,
 )
 
 
@@ -27,6 +28,7 @@ def main(ctx, project):
       schedule  日程管理（直播时段）
       publish   发布管理（打包、回滚）
       report    报表统计（参展统计导出）
+      zone      展区管理（展区概览、验收检查）
     """
     ctx.ensure_object(dict)
     ctx.obj["project_path"] = project
@@ -39,6 +41,7 @@ main.add_command(avatar_cli, name="avatar")
 main.add_command(schedule_cli, name="schedule")
 main.add_command(publish_cli, name="publish")
 main.add_command(report_cli, name="report")
+main.add_command(zone_cli, name="zone")
 
 
 if __name__ == "__main__":

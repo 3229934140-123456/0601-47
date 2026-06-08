@@ -138,21 +138,69 @@ def export_report(ctx, fmt, output, zone, report_type):
     if fmt == "json":
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(report_data, f, ensure_ascii=False, indent=2)
+        print_success(f"报表已导出: {output_path}")
 
     elif fmt == "csv":
-        with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-            if report_type == "all" or report_type == "booths":
-                writer = csv.DictWriter(f, fieldnames=["id", "zone", "company", "contact", "email", "phone"])
-                writer.writeheader()
-                for b in booths:
-                    writer.writerow({k: b.get(k, "") for k in ["id", "zone", "company", "contact", "email", "phone"]})
+        if report_type == "all":
+            _export_csv_all(output_path, report_data)
+        else:
+            _export_csv_single(output_path, report_data, report_type)
+        print_success(f"报表已导出: {output_path}")
 
     elif fmt == "html":
         html_content = _generate_html_report(report_data, report_type)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
+        print_success(f"报表已导出: {output_path}")
 
-    print_success(f"报表已导出: {output_path}")
+
+def _export_csv_single(output_path: Path, report_data: dict, report_type: str):
+    """导出单类型 CSV"""
+    field_configs = {
+        "booths": ["id", "zone", "company", "contact", "email", "phone", "description"],
+        "assets": ["id", "name", "type", "filename", "booth_id", "size", "status"],
+        "avatars": ["id", "name", "title", "company", "booth_id", "nameplate"],
+        "schedules": ["id", "title", "start", "end", "speaker", "booth_id", "zone", "type", "status"],
+    }
+    fields = field_configs.get(report_type, [])
+    items = report_data.get(report_type, [])
+
+    with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        for item in items:
+            writer.writerow(item)
+
+
+def _export_csv_all(base_output: Path, report_data: dict):
+    """导出 all 类型时生成多个 CSV 文件"""
+    base_dir = base_output.parent
+    base_stem = base_output.stem
+
+    types = [
+        ("booths", "展位"),
+        ("assets", "资源"),
+        ("avatars", "嘉宾"),
+        ("schedules", "日程"),
+    ]
+
+    for key, label in types:
+        items = report_data.get(key, [])
+        if items:
+            file_path = base_dir / f"{base_stem}_{key}.csv"
+            _export_csv_single(file_path, report_data, key)
+
+    # 生成汇总文件
+    summary_path = base_dir / f"{base_stem}_summary.csv"
+    if "summary" in report_data:
+        s = report_data["summary"]
+        with open(summary_path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["类别", "数量"])
+            writer.writerow(["展位", s.get("booth_count", 0)])
+            writer.writerow(["资源", s.get("asset_count", 0)])
+            writer.writerow(["嘉宾", s.get("avatar_count", 0)])
+            writer.writerow(["日程", s.get("schedule_count", 0)])
 
 
 def _generate_html_report(data, report_type):
